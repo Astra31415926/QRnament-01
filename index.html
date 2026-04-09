@@ -1,43 +1,41 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html>
 <head>
     <meta charset="UTF-8">
-    <title>Snowflake: Step-by-Step Reflection</title>
+    <title>Snowflake Algorithm v2</title>
     <style>
-        body { background: #000; color: #555; font-family: monospace; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        canvas { border: 1px solid #222; box-shadow: 0 0 40px rgba(0,255,0,0.05); cursor: crosshair; }
-        input { background: transparent; border: none; border-bottom: 1px solid #333; color: #0f0; text-align: center; font-size: 20px; padding: 10px; outline: none; width: 300px; margin-bottom: 20px; }
+        body { background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        canvas { border: 1px solid #333; image-rendering: pixelated; width: 600px; height: 600px; }
+        input { background: #111; border: 1px solid #444; color: #0f0; padding: 10px; width: 300px; margin-bottom: 20px; text-align: center; }
     </style>
 </head>
 <body>
 
-    <input type="text" id="seedInput" value="ALGORITHM" placeholder="TYPE SOMETHING...">
-    <canvas id="canvas" width="800" height="800"></canvas>
+    <input type="text" id="seedInput" value="CRYSTAL" placeholder="Пиши здесь...">
+    <canvas id="mainCanvas" width="800" height="800"></canvas>
 
 <script>
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
+    const mainCanvas = document.getElementById('mainCanvas');
+    const mainCtx = mainCanvas.getContext('2d');
     const seedInput = document.getElementById('seedInput');
 
-    // Набор базовых орнаментальных спрайтов 7x7
     const SPRITES = [
         [0,24,60,126,126,60,24,0], [127,65,93,85,93,65,127], [85,62,99,42,99,62,85],
         [42,119,34,73,34,119,42], [28,42,73,119,73,42,28], [119,85,119,0,119,85,119],
         [62,73,93,127,93,73,62], [8,42,8,119,8,42,8], [99,99,0,0,0,99,99], [99,99,99,99,99,99,99]
     ];
 
-    // Сидированный рандом
     function seededRandom(s) {
         let h = 0; for(let i=0; i<s.length; i++) h = Math.imul(31, h) + s.charCodeAt(i) | 0;
         return function() { h = Math.sin(h++) * 10000; return h - Math.floor(h); };
     }
 
-    function drawSprite(targetCtx, pattern, x, y, size) {
+    function drawSprite(ctx, pattern, x, y, size) {
         const pSize = size / 7;
         for(let r=0; r<7; r++) {
             for(let c=0; c<7; c++) {
                 if((pattern[r] >> (6-c)) & 1) {
-                    targetCtx.fillRect(x + c*pSize, y + r*pSize, pSize + 0.3, pSize + 0.3);
+                    ctx.fillRect(x + c*pSize, y + r*pSize, pSize + 0.3, pSize + 0.3);
                 }
             }
         }
@@ -45,58 +43,51 @@
 
     function render() {
         const rnd = seededRandom(seedInput.value);
-        const size = canvas.width;
-        const half = size / 2;
-        const gridSize = 10; // Сложность сетки
+        const half = 400; // Половина основного холста (800/2)
+        const gridSize = 12; 
         const blockSize = half / gridSize;
 
-        // Временные холсты для этапов отражения
-        const octantCanvas = document.createElement('canvas');
-        octantCanvas.width = half; octantCanvas.height = half;
-        const oCtx = octantCanvas.getContext('2d');
-
-        const quadrantCanvas = document.createElement('canvas');
-        quadrantCanvas.width = half; quadrantCanvas.height = half;
-        const qCtx = quadrantCanvas.getContext('2d');
-
-        // ШАГ 0: Генерируем базовый треугольник (Октант 0-45°)
+        // --- ШАГ 0: Создаем треугольник 45° (Октант) ---
+        const octCanvas = document.createElement('canvas');
+        octCanvas.width = half; octCanvas.height = half;
+        const oCtx = octCanvas.getContext('2d');
         oCtx.fillStyle = "white";
         for (let y = 0; y < gridSize; y++) {
-            for (let x = 0; x <= y; x++) { // Строго x <= y создает треугольник
+            for (let x = 0; x <= y; x++) { // Рисуем треугольник
                 const pattern = SPRITES[Math.floor(rnd() * SPRITES.length)];
                 drawSprite(oCtx, pattern, x * blockSize, y * blockSize, blockSize);
             }
         }
 
-        // ШАГ 1: Зеркало по диагонали (Октант -> Квадрант 90°)
-        // Сначала рисуем оригинал
-        qCtx.drawImage(octantCanvas, 0, 0);
-        // Отражаем: меняем X и Y местами через transform
+        // --- ШАГ 1: Диагональное зеркало (Делаем Квадрант 90°) ---
+        const quadCanvas = document.createElement('canvas');
+        quadCanvas.width = half; quadCanvas.height = half;
+        const qCtx = quadCanvas.getContext('2d');
+        qCtx.drawImage(octCanvas, 0, 0); // Оригинал
         qCtx.save();
-        qCtx.setTransform(0, 1, 1, 0, 0, 0); // Матрица отражения по диагонали y=x
-        qCtx.drawImage(octantCanvas, 0, 0);
+        qCtx.scale(-1, 1); qCtx.rotate(Math.PI / 2); // Отражение по диагонали
+        qCtx.drawImage(octCanvas, 0, 0);
         qCtx.restore();
 
-        // ШАГ 2 и 3: Собираем финальную снежинку на основном холсте
-        ctx.fillStyle = "black";
-        ctx.fillRect(0, 0, size, size);
+        // --- ШАГ 2: Вертикальное зеркало (Делаем Половину 180°) ---
+        const halfCanvas = document.createElement('canvas');
+        halfCanvas.width = 800; halfCanvas.height = half;
+        const hCtx = halfCanvas.getContext('2d');
+        hCtx.drawImage(quadCanvas, half, 0); // Правая четверть
+        hCtx.save();
+        hCtx.translate(half, 0); hCtx.scale(-1, 1); // Зеркалим влево
+        hCtx.drawImage(quadCanvas, 0, 0);
+        hCtx.restore();
 
-        // Правая верхняя четверть
-        ctx.drawImage(quadrantCanvas, half, 0);
-
-        // Левая верхняя четверть (Вертикальное зеркало)
-        ctx.save();
-        ctx.translate(half, 0);
-        ctx.scale(-1, 1);
-        ctx.drawImage(quadrantCanvas, 0, 0);
-        ctx.restore();
-
-        // Нижняя половина (Горизонтальное зеркало)
-        ctx.save();
-        ctx.translate(0, half);
-        ctx.scale(1, -1);
-        ctx.drawImage(canvas, 0, -half); // Отражаем всю верхнюю часть вниз
-        ctx.restore();
+        // --- ШАГ 3: Горизонтальное зеркало (Финальная снежинка 360°) ---
+        mainCtx.fillStyle = "black";
+        mainCtx.fillRect(0, 0, 800, 800);
+        
+        mainCtx.drawImage(halfCanvas, 0, 0); // Рисуем верхнюю половину
+        mainCtx.save();
+        mainCtx.translate(0, 800); mainCtx.scale(1, -1); // Зеркалим вниз
+        mainCtx.drawImage(halfCanvas, 0, 0);
+        mainCtx.restore();
     }
 
     seedInput.addEventListener('input', render);
