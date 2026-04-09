@@ -1,14 +1,63 @@
-function render() {
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Perfect Mandala D8</title>
+    <style>
+        body { background: #000; color: #0f0; font-family: monospace; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; overflow: hidden; }
+        canvas { border: 1px solid #333; image-rendering: pixelated; width: 600px; height: 600px; box-shadow: 0 0 20px rgba(0,255,0,0.1); }
+        input { background: #0a0a0a; border: 1px solid #0f0; color: #0f0; padding: 12px; width: 320px; margin-bottom: 20px; text-align: center; outline: none; font-size: 1.1em; }
+    </style>
+</head>
+<body>
+
+    <input type="text" id="seedInput" value="MANDALA_GOLD" placeholder="TYPE SEED...">
+    <canvas id="mainCanvas" width="840" height="840"></canvas>
+
+<script>
+    const canvas = document.getElementById('mainCanvas');
+    const ctx = canvas.getContext('2d');
+    const seedInput = document.getElementById('seedInput');
+
+    const SPRITES = [
+        [0,24,60,126,126,60,24,0], [127,65,93,85,93,65,127], [85,62,99,42,99,62,85],
+        [42,119,34,73,34,119,42], [28,42,73,119,73,42,28], [119,85,119,0,119,85,119],
+        [62,73,93,127,93,73,62], [8,42,8,119,8,42,8], [99,99,0,0,0,99,99], [99,99,99,99,99,99,99],
+        [123,123,96,107,3,111,111], [51,51,102,102,76,76,25], [63,31,15,7,3,1,0],
+        [0,0,30,30,30,30,0], [0,36,102,102,36,0,0]
+    ];
+
+    function seededRandom(s) {
+        let h = 0; for(let i=0; i<s.length; i++) h = Math.imul(31, h) + s.charCodeAt(i) | 0;
+        return function() { h = Math.sin(h++) * 10000; return h - Math.floor(h); };
+    }
+
+    function drawTransformedSprite(ctx, pIdx, x, y, size, flipH, flipV, trans) {
+        const pattern = SPRITES[pIdx];
+        const pSize = size / 7;
+        for (let pr = 0; pr < 7; pr++) {
+            for (let pc = 0; pc < 7; pc++) {
+                let r = pr, c = pc;
+                if (trans) { let tmp = r; r = c; c = tmp; }
+                if (flipV) r = 6 - r;
+                if (flipH) c = 6 - c;
+                if ((pattern[r] >> (6 - c)) & 1) {
+                    ctx.fillRect(x + pc * pSize, y + pr * pSize, pSize + 0.4, pSize + 0.4);
+                }
+            }
+        }
+    }
+
+    function render() {
         const rnd = seededRandom(seedInput.value);
         const gridSize = 12; 
-        const canvasSize = canvas.width;
-        const blockSize = canvasSize / (gridSize * 2);
+        const blockSize = canvas.width / (gridSize * 2);
 
         ctx.fillStyle = "black";
-        ctx.fillRect(0, 0, canvasSize, canvasSize);
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "white";
 
-        // 1. ПРАВИЛО ОКТАНТА
+        // 1. Генерируем только треугольник (1/8 холста)
         const octantData = [];
         for (let r = 0; r < gridSize; r++) {
             octantData[r] = [];
@@ -17,42 +66,36 @@ function render() {
             }
         }
 
-        // 2. РЕНДЕРИНГ СИММЕТРИИ D8
+        // 2. Отрисовка всей мандалы через отражения
         for (let r_cell = 0; r_cell < gridSize * 2; r_cell++) {
             for (let c_cell = 0; c_cell < gridSize * 2; c_cell++) {
-                
-                // Центрируем координаты: от -(gridSize) до +(gridSize-1)
                 let y = r_cell - gridSize;
                 let x = c_cell - gridSize;
 
-                // Флаги отражения для квадрантов
                 const flipV = y < 0;
                 const flipH = x < 0;
 
-                // Переводим в положительные индексы
                 let abs_y = flipV ? -y - 1 : y;
                 let abs_x = flipH ? -x - 1 : x;
 
-                // Условие транспонирования для октанта (зеркало по диагонали)
+                // Ключевое условие D8 симметрии
                 const trans = abs_x > abs_y;
-                
-                // Находим координаты в базовом треугольнике
                 let s_r = trans ? abs_x : abs_y;
                 let s_c = trans ? abs_y : abs_x;
 
                 const patternIdx = octantData[s_r][s_c];
 
-                // Отрисовка
-                const drawX = c_cell * blockSize;
-                const drawY = r_cell * blockSize;
-
-                // Важно: передаем flipV/flipH и trans для трансформации матрицы 7x7
                 drawTransformedSprite(
                     ctx, patternIdx, 
-                    drawX, drawY, 
-                    blockSize, 
-                    flipH, flipV, trans
+                    c_cell * blockSize, r_cell * blockSize, 
+                    blockSize, flipH, flipV, trans
                 );
             }
         }
     }
+
+    seedInput.addEventListener('input', render);
+    render();
+</script>
+</body>
+</html>
