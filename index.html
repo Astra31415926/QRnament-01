@@ -1,97 +1,58 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Snowflake Algorithm v2</title>
-    <style>
-        body { background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        canvas { border: 1px solid #333; image-rendering: pixelated; width: 600px; height: 600px; }
-        input { background: #111; border: 1px solid #444; color: #0f0; padding: 10px; width: 300px; margin-bottom: 20px; text-align: center; }
-    </style>
-</head>
-<body>
-
-    <input type="text" id="seedInput" value="CRYSTAL" placeholder="Пиши здесь...">
-    <canvas id="mainCanvas" width="800" height="800"></canvas>
-
-<script>
-    const mainCanvas = document.getElementById('mainCanvas');
-    const mainCtx = mainCanvas.getContext('2d');
-    const seedInput = document.getElementById('seedInput');
-
-    const SPRITES = [
-        [0,24,60,126,126,60,24,0], [127,65,93,85,93,65,127], [85,62,99,42,99,62,85],
-        [42,119,34,73,34,119,42], [28,42,73,119,73,42,28], [119,85,119,0,119,85,119],
-        [62,73,93,127,93,73,62], [8,42,8,119,8,42,8], [99,99,0,0,0,99,99], [99,99,99,99,99,99,99]
-    ];
-
-    function seededRandom(s) {
-        let h = 0; for(let i=0; i<s.length; i++) h = Math.imul(31, h) + s.charCodeAt(i) | 0;
-        return function() { h = Math.sin(h++) * 10000; return h - Math.floor(h); };
-    }
-
-    function drawSprite(ctx, pattern, x, y, size) {
-        const pSize = size / 7;
-        for(let r=0; r<7; r++) {
-            for(let c=0; c<7; c++) {
-                if((pattern[r] >> (6-c)) & 1) {
-                    ctx.fillRect(x + c*pSize, y + r*pSize, pSize + 0.3, pSize + 0.3);
-                }
-            }
-        }
-    }
-
-    function render() {
+function render() {
         const rnd = seededRandom(seedInput.value);
-        const half = 400; // Половина основного холста (800/2)
         const gridSize = 12; 
-        const blockSize = half / gridSize;
+        const canvasSize = canvas.width;
+        const blockSize = canvasSize / (gridSize * 2);
 
-        // --- ШАГ 0: Создаем треугольник 45° (Октант) ---
-        const octCanvas = document.createElement('canvas');
-        octCanvas.width = half; octCanvas.height = half;
-        const oCtx = octCanvas.getContext('2d');
-        oCtx.fillStyle = "white";
-        for (let y = 0; y < gridSize; y++) {
-            for (let x = 0; x <= y; x++) { // Рисуем треугольник
-                const pattern = SPRITES[Math.floor(rnd() * SPRITES.length)];
-                drawSprite(oCtx, pattern, x * blockSize, y * blockSize, blockSize);
+        ctx.fillStyle = "black";
+        ctx.fillRect(0, 0, canvasSize, canvasSize);
+        ctx.fillStyle = "white";
+
+        // 1. ПРАВИЛО ОКТАНТА
+        const octantData = [];
+        for (let r = 0; r < gridSize; r++) {
+            octantData[r] = [];
+            for (let c = 0; c <= r; c++) {
+                octantData[r][c] = Math.floor(rnd() * SPRITES.length);
             }
         }
 
-        // --- ШАГ 1: Диагональное зеркало (Делаем Квадрант 90°) ---
-        const quadCanvas = document.createElement('canvas');
-        quadCanvas.width = half; quadCanvas.height = half;
-        const qCtx = quadCanvas.getContext('2d');
-        qCtx.drawImage(octCanvas, 0, 0); // Оригинал
-        qCtx.save();
-        qCtx.scale(-1, 1); qCtx.rotate(Math.PI / 2); // Отражение по диагонали
-        qCtx.drawImage(octCanvas, 0, 0);
-        qCtx.restore();
+        // 2. РЕНДЕРИНГ СИММЕТРИИ D8
+        for (let r_cell = 0; r_cell < gridSize * 2; r_cell++) {
+            for (let c_cell = 0; c_cell < gridSize * 2; c_cell++) {
+                
+                // Центрируем координаты: от -(gridSize) до +(gridSize-1)
+                let y = r_cell - gridSize;
+                let x = c_cell - gridSize;
 
-        // --- ШАГ 2: Вертикальное зеркало (Делаем Половину 180°) ---
-        const halfCanvas = document.createElement('canvas');
-        halfCanvas.width = 800; halfCanvas.height = half;
-        const hCtx = halfCanvas.getContext('2d');
-        hCtx.drawImage(quadCanvas, half, 0); // Правая четверть
-        hCtx.save();
-        hCtx.translate(half, 0); hCtx.scale(-1, 1); // Зеркалим влево
-        hCtx.drawImage(quadCanvas, 0, 0);
-        hCtx.restore();
+                // Флаги отражения для квадрантов
+                const flipV = y < 0;
+                const flipH = x < 0;
 
-        // --- ШАГ 3: Горизонтальное зеркало (Финальная снежинка 360°) ---
-        mainCtx.fillStyle = "black";
-        mainCtx.fillRect(0, 0, 800, 800);
-        
-        mainCtx.drawImage(halfCanvas, 0, 0); // Рисуем верхнюю половину
-        mainCtx.save();
-        mainCtx.translate(0, 800); mainCtx.scale(1, -1); // Зеркалим вниз
-        mainCtx.drawImage(halfCanvas, 0, 0);
-        mainCtx.restore();
+                // Переводим в положительные индексы
+                let abs_y = flipV ? -y - 1 : y;
+                let abs_x = flipH ? -x - 1 : x;
+
+                // Условие транспонирования для октанта (зеркало по диагонали)
+                const trans = abs_x > abs_y;
+                
+                // Находим координаты в базовом треугольнике
+                let s_r = trans ? abs_x : abs_y;
+                let s_c = trans ? abs_y : abs_x;
+
+                const patternIdx = octantData[s_r][s_c];
+
+                // Отрисовка
+                const drawX = c_cell * blockSize;
+                const drawY = r_cell * blockSize;
+
+                // Важно: передаем flipV/flipH и trans для трансформации матрицы 7x7
+                drawTransformedSprite(
+                    ctx, patternIdx, 
+                    drawX, drawY, 
+                    blockSize, 
+                    flipH, flipV, trans
+                );
+            }
+        }
     }
-
-    seedInput.addEventListener('input', render);
-    render();
-</script>
-</body>
-</html>
