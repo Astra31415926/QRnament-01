@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Snowflake Generator v1.0 // Raster Octant Logic</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background: #0a0a0a; color: #eee; font-family: monospace; }
+        canvas { image-rendering: pixelated; border: 1px solid #333; background: #000; }
+        .controls { max-width: 512px; margin: 20px auto; }
+        input { background: #1a1a1a; border: 1px solid #444; color: #0f0; width: 100%; padding: 10px; border-radius: 4px; outline: none; }
+    </style>
+</head>
+<body class="p-8">
+
+    <div class="controls space-y-4">
+        <h1 class="text-xl font-bold text-green-500 tracking-widest">SNOWFLAKE_GENERATOR // GREEN_CHANNEL</h1>
+        <input type="text" id="text-input" placeholder="Введите текст для генерации..." value="GENESIS">
+        <div class="text-[10px] text-gray-500 uppercase tracking-tighter">
+            Logic: Raster Octant 45° // Multiply + Difference // Smart Fill
+        </div>
+    </div>
+
+    <div class="flex justify-center">
+        <canvas id="mainCanvas" width="1024" height="1024" class="max-w-full h-auto shadow-2xl"></canvas>
+    </div>
+
+    <!-- Скрытые холсты для растеризации слоев -->
+    <canvas id="octantCanvas" width="512" height="512" style="display:none"></canvas>
+
+    <script>
+        // Библиотека спрайтов 7x7 (сокращенная версия для примера)
+        const SPRITES = [
+            [73,42,28,127,28,42,73], [127,65,93,85,93,65,127], [85,62,99,42,99,62,85],
+            [42,119,34,73,34,119,42], [28,42,73,119,73,42,28], [64,96,112,120,112,96,64],
+            [119,85,119,0,119,85,119], [62,73,93,127,93,73,62], [54,99,73,20,73,99,54],
+            [99,99,99,99,99,99,99], [119,93,99,34,99,93,119], [12,56,33,107,66,14,24]
+        ];
+        const FILLER_SPRITES = [[8,42,8,119,8,42,8], [42,34,42,8,42,34,42], [51,51,102,102,76,76,25]];
+
+        const input = document.getElementById('text-input');
+        const mainCanvas = document.getElementById('mainCanvas');
+        const mainCtx = mainCanvas.getContext('2d');
+        const octCanvas = document.getElementById('octantCanvas');
+        const octCtx = octCanvas.getContext('2d');
+
+        // Палитры яркости из твоего описания
+        const BLOCK_BRIGHTNESS = [80, 120, 180];
+        const PATTERN_BRIGHTNESS = [180, 200, 160];
+
+        // Сид-рандом (чтобы один текст всегда давал одну снежинку)
+        function seededRandom(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) hash = ((hash << 5) - hash) + str.charCodeAt(i);
+            return function() {
+                hash = Math.sin(hash) * 10000;
+                return hash - Math.floor(hash);
+            };
+        }
+
+        function isSolid(pattern) {
+            let dots = 0;
+            pattern.forEach(row => { for(let i=0; i<7; i++) if((row >> i) & 1) dots++; });
+            return dots > 20;
+        }
+
+        function drawSprite(ctx, pattern, x, y, size, color) {
+            const pSize = size / 7;
+            ctx.fillStyle = `rgb(${color},${color},${color})`;
+            for (let r = 0; r < 7; r++) {
+                for (let c = 0; c < 7; c++) {
+                    if ((pattern[r] >> (6 - c)) & 1) {
+                        ctx.fillRect(x + c * pSize, y + r * pSize, pSize + 0.5, pSize + 0.5);
+                    }
+                }
+            }
+        }
+
+        function generate() {
+            const rnd = seededRandom(input.value || " ");
+            const size = 1024;
+            const center = size / 2;
+            const gridCells = 12; // Размер сетки для октанта
+            const cellSize = (size / 2) / gridCells;
+
+            // 1. ОЧИСТКА
+            octCtx.clearRect(0,0,512,512);
+            mainCtx.fillStyle = "#000";
+            mainCtx.fillRect(0,0,size,size);
+
+            // 2. ФОРМИРУЕМ ОКТАНТ (Треугольник 45°)
+            // Сначала рисуем BlockLayer и PatternLayer в буфер октанта
+            for (let r = 0; r < gridCells; r++) {
+                for (let c = 0; c <= r; c++) {
+                    let pattern = SPRITES[Math.floor(rnd() * SPRITES.length)];
+                    let bColor = BLOCK_BRIGHTNESS[Math.floor(rnd() * BLOCK_BRIGHTNESS.length)];
+                    let pColor = PATTERN_BRIGHTNESS[Math.floor(rnd() * PATTERN_BRIGHTNESS.length)];
+
+                    // Smart Fill logic
+                    if (isSolid(pattern)) {
+                        pattern = FILLER_SPRITES[Math.floor(rnd() * FILLER_SPRITES.length)];
+                        // Инверсия яркости: если блок темный, паттерн светлый
+                        pColor = bColor < 128 ? 230 : 20;
+                    }
+
+                    const x = c * cellSize;
+                    const y = r * cellSize;
+
+                    // Рисуем базу (блок)
+                    octCtx.fillStyle = `rgb(${bColor},${bColor},${bColor})`;
+                    octCtx.fillRect(x, y, cellSize, cellSize);
+
+                    // Рисуем узор (вычитание или наложение)
+                    drawSprite(octCtx, pattern, x, y, cellSize, pColor);
+                }
+            }
+
+            // 3. СИММЕТРИЯ (Растеризация 8 секторов)
+            // Мы берем готовый треугольник и копируем его пиксели
+            for (let i = 0; i < 8; i++) {
+                mainCtx.save();
+                mainCtx.translate(center, center);
+                mainCtx.rotate((i * 45) * Math.PI / 180);
+                if (i % 2 !== 0) mainCtx.scale(1, -1); 
+                
+                // Рисуем октант
+                mainCtx.drawImage(octCanvas, 0, 0);
+                mainCtx.restore();
+            }
+
+            // 4. МАТЕМАТИЧЕСКОЕ НАЛОЖЕНИЕ (Difference)
+            // Создаем эффект "глубины" путем наложения всей снежинки на саму себя с поворотом
+            mainCtx.globalCompositeOperation = 'difference';
+            mainCtx.save();
+            mainCtx.translate(center, center);
+            mainCtx.rotate(15 * Math.PI / 180); // Небольшой сдвиг для интерференции
+            mainCtx.scale(0.9, 0.9); // Чуть меньше
+            mainCtx.drawImage(mainCanvas, -center, -center);
+            mainCtx.restore();
+
+            // Возврат к нормальному режиму
+            mainCtx.globalCompositeOperation = 'source-over';
+        }
+
+        input.addEventListener('input', generate);
+        window.onload = generate;
+    </script>
+</body>
+</html>
